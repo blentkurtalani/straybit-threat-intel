@@ -145,6 +145,34 @@
     @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
     .fin{animation:fi .3s ease}@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
     .footer{padding:14px 24px;border-top:1px solid var(--bd);text-align:center;font-size:10.5px;color:var(--t3);background:var(--bg1)}
+
+    /* User dropdown */
+    .ud{position:relative}.ud-menu{display:none;position:absolute;top:40px;right:0;width:200px;background:var(--bg2);border:1px solid var(--bd);border-radius:12px;padding:6px;z-index:200;box-shadow:0 12px 40px rgba(0,0,0,.5)}.ud-menu.open{display:block}
+    .ud-item{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;font-size:12.5px;color:var(--t2);cursor:pointer;transition:all .15s;border:none;background:none;width:100%;font-family:var(--ff);text-align:left}.ud-item:hover{background:var(--bg3);color:var(--t1)}
+    .ud-sep{height:1px;background:var(--bd);margin:4px 0}
+    .ud-header{padding:10px 12px;border-bottom:1px solid var(--bd);margin-bottom:4px}.ud-email{font-size:11px;color:var(--t3);font-family:var(--fm)}
+    .ud-item.danger{color:var(--red)}.ud-item.danger:hover{background:#f8717115}
+
+    /* Source links */
+    .src-link{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;background:var(--bg0);color:var(--cyan);border:1px solid var(--bd);cursor:pointer;text-decoration:none;transition:all .15s;font-family:var(--fm)}
+    .src-link:hover{border-color:var(--cyan);background:var(--bg3);color:var(--t1)}
+
+    /* History */
+    .hist-item{display:flex;align-items:center;gap:14px;padding:12px 16px;background:var(--bg0);border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all .15s}
+    .hist-item:hover{border-color:var(--bd2);background:var(--bgh)}
+    .hist-q{font-family:var(--fm);font-size:12.5px;color:var(--t1);flex:1}.hist-type{font-size:10px}.hist-time{font-size:11px;color:var(--t3);font-family:var(--fm)}
+    .hist-empty{text-align:center;padding:40px;color:var(--t3);font-size:13px}
+
+    /* Copy toast */
+    .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--bd2);color:var(--t1);padding:10px 20px;border-radius:10px;font-size:12.5px;z-index:999;animation:sU .3s ease;font-family:var(--ff)}
+
+    /* Required field */
+    .freq::after{content:' *';color:var(--red)}
+    .field-err{border-color:var(--red) !important;box-shadow:0 0 0 2px rgba(248,113,113,.15) !important}
+    .err-msg{font-size:11px;color:var(--red);margin-top:4px;display:none}.err-msg.show{display:block}
+
+    /* Export button */
+    .exp-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;background:var(--bg0);border:1px solid var(--bd);border-radius:6px;color:var(--t2);font-size:11px;font-family:var(--ff);cursor:pointer;transition:all .15s}.exp-btn:hover{border-color:var(--bd2);color:var(--t1)}
     @media(max-width:1024px){.stats{grid-template-columns:repeat(2,1fr)}.g2{grid-template-columns:1fr}.ag{grid-template-columns:repeat(2,1fr)}}
     @media(max-width:640px){.stats{grid-template-columns:1fr}.tb-nav{display:none}.main{padding:14px}.auth-box{width:92%;padding:32px 24px}.modal{width:92%;padding:28px 20px}}
     .hidden{display:none}
@@ -159,7 +187,52 @@
       usage: { used: 0, limit: 10, remaining: 10 },
       showProfile: false, searchResult: null, searchLoading: false,
       selectedFeed: null, cveQuery: '', phishResult: null, phishLoading: false,
+      userMenuOpen: false, searchHistory: [], profileErrors: {},
     };
+
+    // ── Source URLs for clickable links ──
+    const SOURCE_URLS = {
+      abuseipdb: (q) => `https://www.abuseipdb.com/check/${q}`,
+      virustotal: (q) => `https://www.virustotal.com/gui/search/${q}`,
+      shodan: (q) => `https://www.shodan.io/host/${q}`,
+      ipinfo: (q) => `https://ipinfo.io/${q}`,
+      otx: (q) => `https://otx.alienvault.com/indicator/domain/${q}`,
+      urlhaus: (q) => `https://urlhaus.abuse.ch/browse.php?search=${q}`,
+      nvd: (q) => `https://nvd.nist.gov/vuln/detail/${q}`,
+      cisa_kev: () => `https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,
+      google_safe_browsing: (q) => `https://transparencyreport.google.com/safe-browsing/search?url=${q}`,
+    };
+
+    function getSourceUrl(source, query) {
+      const key = source.toLowerCase().replace(/\s+/g, '_').replace('google_safe_browsing','google_safe_browsing');
+      const fn = SOURCE_URLS[key] || SOURCE_URLS[source] || null;
+      return fn ? fn(query) : null;
+    }
+
+    function addToHistory(query, type, score) {
+      S.searchHistory.unshift({ q: query, type, score: score||0, time: new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}), date: new Date().toLocaleDateString() });
+      if (S.searchHistory.length > 50) S.searchHistory.pop();
+    }
+
+    function showToast(msg) {
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2000);
+    }
+
+    function copyIOC(text) {
+      navigator.clipboard.writeText(text).then(() => showToast('Copied: ' + text));
+    }
+
+    function exportJSON(data, filename) {
+      const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+    }
 
     // ── API helpers ──
     async function api(path, opts = {}) {
@@ -373,7 +446,9 @@
           await refreshUsage();
         }
       }
-      S.searchLoading = false; render();
+      S.searchLoading = false;
+      if (S.searchResult) addToHistory(q, S.searchResult.type, S.searchResult.score);
+      render();
     }
 
     async function doPhishCheck() {
@@ -389,16 +464,25 @@
         const data = await api(`/api/search/phishing?q=${encodeURIComponent(q)}`);
         if (data) { S.phishResult = parsePhishingResult(data); await refreshUsage(); }
       }
-      S.phishLoading = false; render();
+      S.phishLoading = false;
+      if (S.phishResult) addToHistory(q, 'phishing', S.phishResult.score);
+      render();
     }
 
     // ── Profile submit ──
     async function submitProfile() {
+      const required = ['company_name','company_size','job_title','industry'];
       const f = {};
+      let hasError = false;
+      S.profileErrors = {};
       ['company_name','company_size','job_title','phone','industry','use_case'].forEach(k => {
         const el = document.getElementById('pf-'+k);
         if (el) f[k] = el.value;
       });
+      required.forEach(k => {
+        if (!f[k] || f[k].trim() === '') { S.profileErrors[k] = true; hasError = true; }
+      });
+      if (hasError) { render(); showToast('Please fill in all required fields'); return; }
       if (!S.demo) {
         await api('/api/user/profile', {
           method: 'PUT',
@@ -458,18 +542,26 @@
       else if (S.page === 'feeds') pageHTML = renderFeeds();
       else if (S.page === 'cve') pageHTML = renderCVE();
       else if (S.page === 'phishing') pageHTML = renderPhishing();
+      else if (S.page === 'history') pageHTML = renderHistory();
 
       app.innerHTML = `
         ${S.showProfile ? renderProfileModal() : ''}
         <header class="topbar">
           <div class="tb-br"><div class="tb-logo"><img src="data:image/png;base64,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" alt="SB"></div><div><div class="tb-nm">Stray<span style="color:var(--cyan)">Bit</span> Threat Intel</div><div class="tb-sub">threat.straybit.io</div></div></div>
           <nav class="tb-nav">
-            ${['dashboard','lookup','feeds','cve','phishing'].map((p,i) => `<button class="nb ${S.page===p?'act':''}" onclick="S.page='${p}';S.searchResult=null;S.phishResult=null;render()">${['Dashboard','IP / Domain','Threat Feeds','CVE Search','Phishing'][i]}</button>`).join('')}
+            ${['dashboard','lookup','feeds','cve','phishing','history'].map((p,i) => `<button class="nb ${S.page===p?'act':''}" onclick="S.page='${p}';S.searchResult=null;S.phishResult=null;S.userMenuOpen=false;render()">${['Dashboard','IP / Domain','Threat Feeds','CVE Search','Phishing','History'][i]}</button>`).join('')}
           </nav>
           <div class="tb-r">
             <div class="um"><div class="um-bw"><div class="um-b" style="width:${pct}%;background:${uc}"></div></div><span class="um-t">${u.remaining}/${u.limit} left</span></div>
             ${S.demo ? '<button class="obtn" style="width:auto;margin:0;padding:6px 14px;font-size:12px" onclick="S.demo=false;render()">Sign In</button>' :
-            `<div class="uc" onclick="S.showProfile=true;render()"><div class="ua">${S.user?.avatar_url?`<img src="${S.user.avatar_url}">`:`${uinit}`}</div><span class="un">${uname}</span></div>`}
+            `<div class="ud"><div class="uc" onclick="S.userMenuOpen=!S.userMenuOpen;render()"><div class="ua">${S.user?.avatar_url?`<img src="${S.user.avatar_url}">`:`${uinit}`}</div><span class="un">${uname}</span></div>
+            <div class="ud-menu ${S.userMenuOpen?'open':''}">
+              <div class="ud-header"><div style="font-size:13px;font-weight:600;color:var(--t1)">${uname}</div><div class="ud-email">${S.user?.email||''}</div></div>
+              <button class="ud-item" onclick="S.page='history';S.userMenuOpen=false;render()">📋 Search History</button>
+              <button class="ud-item" onclick="S.showProfile=true;S.userMenuOpen=false;render()">👤 Edit Profile</button>
+              <div class="ud-sep"></div>
+              <button class="ud-item danger" onclick="logout()">⏻ Sign Out</button>
+            </div></div>`}
           </div>
         </header>
         <main class="main">${pageHTML}</main>
@@ -478,14 +570,15 @@
     }
 
     function renderProfileModal() {
-      return `<div class="modal-ov"><div class="modal">
-        <h2 class="mt2">Complete Your Profile</h2><p class="md2">Help us tailor your experience. Unlock priority support.</p>
-        <div class="fr"><div class="fg"><label class="fl">Company Name</label><input class="fi" id="pf-company_name" placeholder="e.g. Acme Corp"></div><div class="fg"><label class="fl">Company Size</label><select class="fs" id="pf-company_size"><option value="">Select...</option><option value="1-10">1–10</option><option value="11-50">11–50</option><option value="51-200">51–200</option><option value="201-1000">201–1k</option><option value="1000+">1k+</option></select></div></div>
-        <div class="fr"><div class="fg"><label class="fl">Job Title</label><input class="fi" id="pf-job_title" placeholder="e.g. SOC Analyst"></div><div class="fg"><label class="fl">Phone</label><input class="fi" id="pf-phone" placeholder="+1 555 000 0000"></div></div>
-        <div class="fg"><label class="fl">Industry</label><select class="fs" id="pf-industry"><option value="">Select...</option><option value="finance">Financial Services</option><option value="healthcare">Healthcare</option><option value="tech">Technology</option><option value="government">Government</option><option value="mssp">MSSP / Security</option><option value="other">Other</option></select></div>
+      const e = S.profileErrors || {};
+      return `<div class="modal-ov" onclick="if(event.target===this){S.showProfile=false;render()}"><div class="modal">
+        <h2 class="mt2">Complete Your Profile</h2><p class="md2">Fields marked with <span style="color:var(--red)">*</span> are required to continue.</p>
+        <div class="fr"><div class="fg"><label class="fl freq">Company Name</label><input class="fi ${e.company_name?'field-err':''}" id="pf-company_name" placeholder="e.g. Acme Corp"></div><div class="fg"><label class="fl freq">Company Size</label><select class="fs ${e.company_size?'field-err':''}" id="pf-company_size"><option value="">Select...</option><option value="1-10">1–10</option><option value="11-50">11–50</option><option value="51-200">51–200</option><option value="201-1000">201–1k</option><option value="1000+">1k+</option></select></div></div>
+        <div class="fr"><div class="fg"><label class="fl freq">Job Title</label><input class="fi ${e.job_title?'field-err':''}" id="pf-job_title" placeholder="e.g. SOC Analyst"></div><div class="fg"><label class="fl">Phone</label><input class="fi" id="pf-phone" placeholder="+1 555 000 0000"></div></div>
+        <div class="fg"><label class="fl freq">Industry</label><select class="fs ${e.industry?'field-err':''}" id="pf-industry"><option value="">Select...</option><option value="finance">Financial Services</option><option value="healthcare">Healthcare</option><option value="tech">Technology</option><option value="government">Government</option><option value="mssp">MSSP / Security</option><option value="other">Other</option></select></div>
         <div class="fg"><label class="fl">Use Case</label><textarea class="fta" id="pf-use_case" placeholder="SOC ops, IR, compliance..."></textarea></div>
         <button class="btn-p" onclick="submitProfile()">Save & Start Searching</button>
-        <button class="btn-g" onclick="S.showProfile=false;render()">Skip for now</button>
+        ${S.user?.profile_completed ? '<button class="btn-g" onclick="S.showProfile=false;render()">Cancel</button>' : ''}
       </div></div>`;
     }
 
@@ -556,7 +649,11 @@
           </div>
           <div style="padding:12px 16px;background:var(--bg2);border:1px solid var(--bd);border-radius:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <span style="font-size:11px;color:var(--t3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Sources:</span>
-            ${(r.src||[]).map(s=>`<span class="mt2t">${s}</span>`).join('')}
+            ${(r.src||[]).map(s=>{const url=getSourceUrl(s,r.q);return url?`<a class="src-link" href="${url}" target="_blank" rel="noopener">${s} ↗</a>`:`<span class="mt2t">${s}</span>`;}).join('')}
+            <div style="margin-left:auto;display:flex;gap:6px">
+              <button class="exp-btn" onclick="copyIOC('${r.q}')">📋 Copy IOC</button>
+              <button class="exp-btn" onclick="exportJSON(S.searchResult,'straybit-${r.q}.json')">⬇ Export JSON</button>
+            </div>
           </div>
         </div>`:''}`;
     }
@@ -606,6 +703,30 @@
           </div></div></div>
         </div></div>`:''}`;
     }
+
+    function renderHistory() {
+      const h = S.searchHistory;
+      return `
+        <div class="ph"><h1>Search History</h1><p>Your recent searches from this session. ${h.length > 0 ? `${h.length} queries logged.` : ''}</p></div>
+        ${h.length === 0 ? '<div class="hist-empty">No searches yet. Start investigating IPs, domains, or URLs to see your history here.</div>' : ''}
+        ${h.map((item, i) => `
+          <div class="hist-item" onclick="document.getElementById('lookup-input')?.value;S.page='${item.type==='phishing'?'phishing':'lookup'}';render();setTimeout(()=>{const el=document.getElementById('${item.type==='phishing'?'phish-input':'lookup-input'}');if(el)el.value='${item.q}';},50)">
+            <span class="tag tag-${item.type==='ip'?'info':item.type==='domain'?'med':item.type==='cve'?'crit':'high'}">${item.type}</span>
+            <span class="hist-q">${item.q}</span>
+            <span class="tag ${item.score>=80?'tag-mal':item.score>=30?'tag-warn':'tag-clean'}">${item.score>0?'Score: '+item.score:'—'}</span>
+            <span class="hist-time">${item.time}</span>
+          </div>
+        `).join('')}
+        ${h.length > 0 ? `<div style="margin-top:16px;display:flex;gap:8px">
+          <button class="exp-btn" onclick="exportJSON(S.searchHistory,'straybit-history.json')">⬇ Export History</button>
+          <button class="exp-btn" onclick="S.searchHistory=[];render()">🗑 Clear History</button>
+        </div>` : ''}`;
+    }
+
+    // Close user menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (S.userMenuOpen && !e.target.closest('.ud')) { S.userMenuOpen = false; render(); }
+    });
 
     // ── Init ──
     checkSession();
